@@ -43,7 +43,7 @@ curl -fsSL https://openclaw.ai/install.sh | bash
 ![alt text](doc/onboard_2.png)
 ![alt text](doc/onboard_3.png)
 4. 选择你使用的提供商,推荐免费的*Qwen*，*OpenRouter*，*Ollama*
-![alt text](doc/onboard_4.png)
+![alt text](doc/onborad_4.png)
 5. 选择你希望使用的公司的模型
 ![alt text](doc/onboard_5.png)
 6. 选择一个默认模型

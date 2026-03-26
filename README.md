@@ -10,6 +10,7 @@
   - [📋 目录](#-目录)
   - [✨ 仓库特性](#-仓库特性)
   - [🚀 快速开始](#-快速开始)
+    - [openclaw部署](#openclaw部署)
     - [1. 克隆项目](#1-克隆项目)
     - [2. 提示Agent学习技能](#2-提示agent学习技能)
   - [📦 技能模块说明](#-技能模块说明)
@@ -24,6 +25,38 @@
 
 
 ## 🚀 快速开始
+
+### openclaw部署
+
+进入OpenClaw官网[https://openclaw.ai/](https://openclaw.ai/)
+
+执行一键安装命令：
+```bash
+curl -fsSL https://openclaw.ai/install.sh | bash
+```
+
+接下来进行OpenClaw配置
+1. 选择'*YES*'
+![alt text](doc/onborad_1.jpg)
+2. 选择'*QuickStart*'
+3. 选择'*Update values*'
+![alt text](doc/onboard_2.png)
+![alt text](doc/onboard_3.png)
+4. 选择你使用的提供商,推荐免费的*Qwen*，*OpenRouter*，*Ollama*
+![alt text](doc/onboard_4.png)
+5. 选择你希望使用的公司的模型
+![alt text](doc/onboard_5.png)
+6. 选择一个默认模型
+![alt text](doc/onboard_6.png)
+7. 选择你将要接入龙虾的APP
+8. 选择网页搜索提供商
+![alt text](doc/onboard_7.png)
+9. 选择技能（暂时不需要）
+10. 钩子全选
+![alt text](doc/onboard_8.png)
+11. 选择'*restart*'
+12. 选择'*Web UI*'
+![alt text](doc/onboard_9.png)
 
 ### 1. 克隆项目
 

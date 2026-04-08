@@ -525,7 +525,7 @@ def _create_sam3_transformer(has_presence_token: bool = True) -> TransformerWrap
 
 def _load_checkpoint(
     model,
-    checkpoint_path="/home/agilex/.cache/modelscope/hub/models/facebook/sam3/sam3.pt",
+    checkpoint_path="/home/kling/.cache/modelscope/hub/models/facebook/sam3/sam3.pt",
 ):
     """Load model checkpoint from file."""
     with g_pathmgr.open(checkpoint_path, "rb") as f:
@@ -564,7 +564,7 @@ def build_sam3_image_model(
     bpe_path=None,
     device="cuda" if torch.cuda.is_available() else "cpu",
     eval_mode=True,
-    checkpoint_path="/home/agilex/.cache/modelscope/hub/models/facebook/sam3/sam3.pt",
+    checkpoint_path="/home/kling/.cache/modelscope/hub/models/facebook/sam3/sam3.pt",
     load_from_HF=True,
     enable_segmentation=True,
     enable_inst_interactivity=False,
@@ -656,7 +656,7 @@ def download_ckpt_from_hf():
 def build_sam3_video_model(
     checkpoint_path: Optional[
         str
-    ] = "/home/agilex/.cache/modelscope/hub/models/facebook/sam3/sam3.pt",
+    ] = "/home/kling/.cache/modelscope/hub/models/facebook/sam3/sam3.pt",
     load_from_HF=True,
     bpe_path: Optional[str] = None,
     has_presence_token: bool = True,

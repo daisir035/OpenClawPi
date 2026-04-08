@@ -82,7 +82,7 @@ try:
             # print("正在进行推理...")
             try:
                 response = chat(
-                    model="qwen3.5:9b",
+                    model="qwen3.5:latest",
                     messages=[
                         {
                             "role": "user",

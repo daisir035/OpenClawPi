@@ -44,7 +44,7 @@ CAN_CHANNEL = "can0"
 TCP_OFFSET = [0.0, 0.0, 0.10, 0.0, 0.0, 0.0]  # TCP Z 轴 +14cm
 SPEED_PERCENT = 30
 MOTION_TIMEOUT = 15.0
-POSE_SAVE_FILE = "/home/agilex/.nanobot/workspace/skills/grab_skill/sam3/recorded_j6_pose.json"  # J6 法兰位姿保存路径（与 heihei 共用）
+POSE_SAVE_FILE = "/home/kling/Github/OpenClawPi/skills/grab_skill/sam3/recorded_j6_pose.json"  # J6 法兰位姿保存路径（与 heihei 共用）
 GRIPPER_MAX_WIDTH = 0.1  # 夹爪最大开口 (m)
 GRIPPER_MIN_WIDTH = 0.0  # 夹爪最小开口 (m)
 GRIPPER_FORCE = 2.0  # 夹爪夹持力 (N)
@@ -54,14 +54,15 @@ DEPTH_SCALE_ROS = 0.001  # 每个深度单位对应的米数（mm -> m）
 
 # J6 到相机坐标系的变换 [x, y, z, qx, qy, qz, qw]（与 j6_pose_tf_node.py 一致）
 # 即 T_j6_to_camera，用于 T_result = T_j6 @ T_j6_to_camera（相机在基座系下）
+# 手眼标定结果更新于 2026-04-08
 J6_TO_CAMERA = [
-    -0.06657143797304754,
-    -0.007181201910632633,
-    0.033259474804825814,
-    -0.1665998530,
-    0.1479507149,
-    -0.6490963521,
-    0.7273437981,
+    -0.07641990892157852,   # x
+    0.03974314549949072,    # y
+    0.03669946574008707,    # z
+    -0.1362927116623499,    # qx
+    0.12092307058927487,    # qy
+    -0.6929043228540119,    # qz
+    0.6976284878910897,     # qw
 ]
 
 # ROS TF 坐标系名称
@@ -86,7 +87,7 @@ T_CAMLINK_TO_COLOR_OPTICAL = [
 CAMERA_OPTICAL_FRAME = "camera_color_optical_frame"
 
 # RealSense ROS2 相机节点：程序内自动拉起/退出
-CAMERA_WS_PATH = "/home/agilex/ros_workspace/camera_ws"
+CAMERA_WS_PATH = "/home/kling/piper_ros"
 CAMERA_SETUP_SCRIPT = os.path.join(CAMERA_WS_PATH, "install", "setup.sh")
 CAMERA_LAUNCH_CMD = "ros2 launch realsense2_camera rs_align_depth_launch.py"
 CAMERA_LAUNCH_SHELL_CMD = (
@@ -583,7 +584,7 @@ def sam_worker(
     print(f"[SAM Worker] 使用设备: {device}")
 
     checkpoint_path = (
-        "/home/agilex/.cache/modelscope/hub/models/facebook/sam3/sam3.pt"
+        "/home/kling/.cache/modelscope/hub/models/facebook/sam3/sam3.pt"
     )
     print(f"[SAM Worker] 加载 SAM3 模型: {checkpoint_path}")
     model = build_sam3_image_model(
@@ -1684,7 +1685,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--prompt",
         type=str,
-        default="person",
+        default="red cube",
         help="SAM3 文本提示，例如 'person', 'hand', 'chair' 等",
     )
     parser.add_argument(

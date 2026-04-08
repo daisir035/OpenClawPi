@@ -27,7 +27,7 @@ class Sam3VideoPredictor:
 
     def __init__(
         self,
-        checkpoint_path="/home/agilex/.cache/modelscope/hub/models/facebook/sam3/sam3.pt",
+        checkpoint_path="/home/kling/.cache/modelscope/hub/models/facebook/sam3/sam3.pt",
         bpe_path=None,
         has_presence_token=True,
         geo_encoder_use_img_cross_attn=True,

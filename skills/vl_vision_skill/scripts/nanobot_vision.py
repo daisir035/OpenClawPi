@@ -18,8 +18,8 @@ def get_prompt():
 # 创建并配置pipeline
 pipeline = rs.pipeline()
 config = rs.config()
-# 启用彩色流（通用标准配置：640x480，BGR格式，30fps）
-config.enable_stream(rs.stream.color, 1920, 1080, rs.format.bgr8, 30)
+# 启用彩色流（1920x1080分辨率，RGB8格式，8fps）
+config.enable_stream(rs.stream.color, 1920, 1080, rs.format.rgb8, 8)
 
 # 启动流
 pipeline.start(config)
@@ -69,8 +69,9 @@ try:
     color_frame = frames.get_color_frame()
 
     if color_frame:
-        # 转换为OpenCV格式图像
+        # 转换为OpenCV格式图像（RGB转BGR）
         color_img = np.asanyarray(color_frame.get_data())
+        color_img = cv.cvtColor(color_img, cv.COLOR_RGB2BGR)
 
         # # 显示图像
         # cv.imshow('RealSense Captured Frame', color_img)

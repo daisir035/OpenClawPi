@@ -183,25 +183,118 @@ def start_camera_launch():
         return None
 
 
+# def stop_camera_launch(proc, timeout=10):
+#     """终止由 start_camera_launch 拉起的进程（及其进程组）。"""
+#     if proc is None:
+#         return
+#     try:
+#         if proc.poll() is None:
+#             pgid = os.getpgid(proc.pid)
+#             os.killpg(pgid, signal.SIGTERM)
+#             proc.wait(timeout=timeout)
+#     except ProcessLookupError:
+#         pass
+#     except Exception as e:
+#         print(f"[Camera] 关闭 launch 时出错: {e}")
+#         try:
+#             proc.kill()
+#             proc.wait(timeout=3)
+#         except Exception:
+#             pass
 def stop_camera_launch(proc, timeout=10):
-    """终止由 start_camera_launch 拉起的进程（及其进程组）。"""
+    """
+    终止由 start_camera_launch 拉起的进程（及其进程组）。
+    优雅终止顺序：SIGINT -> SIGTERM -> SIGKILL
+    并清理 ROS2/FastDDS 残留资源。
+    """
     if proc is None:
         return
+
+    pgid = None
     try:
-        if proc.poll() is None:
-            pgid = os.getpgid(proc.pid)
+        pgid = os.getpgid(proc.pid)
+    except ProcessLookupError:
+        pass  # 进程已终止
+
+    # ========== 第1步：尝试优雅终止 (SIGINT，相当于 Ctrl+C) ==========
+    try:
+        if pgid:
+            os.killpg(pgid, signal.SIGINT)
+        elif proc.poll() is None:
+            proc.send_signal(signal.SIGINT)
+
+        # 等待进程自然退出
+        proc.wait(timeout=3)
+        print("[Camera] Launch 进程已优雅终止")
+    except (subprocess.TimeoutExpired, ProcessLookupError):
+        pass  # 超时或进程已退出，继续下一步
+    except Exception as e:
+        print(f"[Camera] SIGINT 发送失败: {e}")
+
+    # ========== 第2步：如果还在，发送 SIGTERM ==========
+    try:
+        if proc.poll() is None and pgid:
             os.killpg(pgid, signal.SIGTERM)
             proc.wait(timeout=timeout)
+            print("[Camera] Launch 进程已 SIGTERM 终止")
+    except subprocess.TimeoutExpired:
+        print("[Camera] SIGTERM 超时，准备强制终止...")
     except ProcessLookupError:
         pass
     except Exception as e:
-        print(f"[Camera] 关闭 launch 时出错: {e}")
+        print(f"[Camera] SIGTERM 发送失败: {e}")
+
+    # ========== 第3步：强制终止 (SIGKILL) ==========
+    try:
+        if proc.poll() is None and pgid:
+            os.killpg(pgid, signal.SIGKILL)
+            proc.wait(timeout=3)
+            print("[Camera] Launch 进程已强制终止")
+    except Exception:
         try:
             proc.kill()
-            proc.wait(timeout=3)
+            proc.wait(timeout=2)
         except Exception:
             pass
 
+    # ========== 第4步：停止 ROS2 Daemon ==========
+    try:
+        subprocess.run(
+            ["ros2", "daemon", "stop"],
+            capture_output=True,
+            timeout=5
+        )
+        print("[Camera] ROS2 Daemon 已停止")
+    except Exception:
+        pass
+
+    # ========== 第5步：清理残留 RealSense 进程 ==========
+    for pattern in ["realsense2_camera", "camera/camera"]:
+        try:
+            subprocess.run(
+                ["pkill", "-9", "-f", pattern],
+                capture_output=True,
+                timeout=2
+            )
+        except Exception:
+            pass
+
+    # ========== 第6步：清理 FastDDS 共享内存和信号量 ==========
+    try:
+        import glob
+
+        shm_files = glob.glob("/dev/shm/fastrtps_*") + glob.glob(
+            "/dev/shm/sem.fastrtps_*"
+        )
+        for f in shm_files:
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+        if shm_files:
+            print(f"[Camera] 已清理 {len(shm_files)} 个 FastDDS 残留文件")
+    except Exception:
+        pass
 
 # 无保存文件时的 fallback：相机在基座系下的齐次矩阵（仅当未按 D 记录过时使用）
 T_BASE_CAM_FALLBACK = np.array(
@@ -575,6 +668,7 @@ def sam_worker(
     """
     子进程：专门跑 SAM3 推理（在 GPU 上），避免与 RealSense 的 C++/CUDA 冲突。
     """
+    import gc
     import torch
     from sam3 import build_sam3_image_model
     from sam3.model.sam3_image_processor import Sam3Processor
@@ -597,6 +691,10 @@ def sam_worker(
 
     current_prompt = initial_prompt
     print(f"[SAM Worker] 初始文本提示: '{current_prompt}'")
+
+    # 用于控制显存清理的计数器
+    frame_count = 0
+    CACHE_CLEAR_INTERVAL = 30  # 每 30 帧清理一次显存缓存
 
     with torch.no_grad():
         while True:
@@ -657,6 +755,13 @@ def sam_worker(
                         "ids": sam_outputs["out_obj_ids"],
                     }
                 )
+
+                # 定期清理显存缓存，防止 OOM
+                frame_count += 1
+                if device == "cuda" and frame_count % CACHE_CLEAR_INTERVAL == 0:
+                    torch.cuda.empty_cache()
+                    gc.collect()
+
             except Exception as e:
                 print(f"[SAM Worker] 推理异常: {e}")
 
@@ -1260,6 +1365,11 @@ class RealSenseAlignAdvanced:
             result = compute_grasp_from_pca_aabb(
                 pts_for_grasp, gripper_max_opening=float(GRIPPER_MAX_WIDTH)
             )
+            # 显式释放点云对象，帮助垃圾回收
+            del pcd_raw
+            del pcd_down
+            del pcd_denoised
+            del pcd_show
             if result is None:
                 continue
             center, R_grasp = result
@@ -1312,6 +1422,9 @@ class RealSenseAlignAdvanced:
             )
         else:
             self.best_grasp_T = None
+        # 显式清理大数组，帮助释放内存
+        del depth_raw
+        del depth_m
         return self.best_grasp_T is not None, all_pts, all_cols
 
     def _do_grasp_move(self):
@@ -1407,12 +1520,17 @@ class RealSenseAlignAdvanced:
                     # ===== SAM3 实时推理（通过子进程）=====
                     rgb_for_sam = cv2.cvtColor(original_color_image, cv2.COLOR_BGR2RGB)
 
-                    # 往子进程发送当前帧（队列满则跳过，避免阻塞）
-                    if not self.sam_input_q.full():
+                    # 往子进程发送当前帧（队列满则丢弃旧帧，避免阻塞和内存堆积）
+                    if self.sam_input_q.full():
                         try:
-                            self.sam_input_q.put_nowait(rgb_for_sam)
-                        except queue.Full:
+                            while True:
+                                self.sam_input_q.get_nowait()
+                        except queue.Empty:
                             pass
+                    try:
+                        self.sam_input_q.put_nowait(rgb_for_sam)
+                    except queue.Full:
+                        pass
 
                     # 尝试从子进程获取最新的分割结果与掩码（如无新结果则继续使用上一帧）
                     try:
@@ -1557,9 +1675,9 @@ class RealSenseAlignAdvanced:
                             else:
                                 self._auto_p_retries += 1
                                 if self._auto_p_retries >= 10:
-                                    print("[Auto] p 连续 10 次无有效目标，关闭程序")
-                                    self.running = False
-                                    break
+                                    print("[Auto] p 连续 10 次无有效目标，准备回零后退出")
+                                    self._auto_state_ts = now
+                                    self._auto_state = 10
                         elif self._auto_state == 4:
                             if now - self._auto_state_ts >= 2.0:
                                 print("[Auto] 执行 g（下发抓取）")
@@ -1587,6 +1705,18 @@ class RealSenseAlignAdvanced:
                         elif self._auto_state == 8:
                             if now - self._auto_state_ts >= 2.0:
                                 print("[Auto] 流程结束，退出程序")
+                                self.running = False
+                                break
+                        elif self._auto_state == 10:
+                            # SAM3 连续10次无有效目标，执行回零后退出
+                            if now - self._auto_state_ts >= 0.5:
+                                print("[Auto] 执行 s（回零）")
+                                self._move_to_home()
+                                self._auto_state_ts = now
+                                self._auto_state = 11
+                        elif self._auto_state == 11:
+                            if now - self._auto_state_ts >= 3.0:
+                                print("[Auto] 回零完成，退出程序")
                                 self.running = False
                                 break
                     key = cv2.waitKey(1)

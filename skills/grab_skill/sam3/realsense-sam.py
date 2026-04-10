@@ -1,4 +1,5 @@
 import argparse
+import atexit
 import json
 import multiprocessing as mp
 import os
@@ -698,7 +699,13 @@ def sam_worker(
 
     with torch.no_grad():
         while True:
-            frame_rgb = input_q.get()
+            # 使用timeout定期检查退出信号，提高响应速度
+            try:
+                frame_rgb = input_q.get(timeout=1.0)
+            except queue.Empty:
+                # 超时后继续循环，检查是否应该退出
+                continue
+
             if frame_rgb is None:
                 print("[SAM Worker] 收到退出信号，结束进程。")
                 break
@@ -1865,6 +1872,18 @@ if __name__ == "__main__":
     )
     sam_proc.start()
 
+    # 注册atexit处理函数，确保异常退出时也能清理SAM进程
+    def _emergency_cleanup():
+        if sam_proc.is_alive():
+            print("[atexit] 紧急清理SAM进程...")
+            sam_proc.terminate()
+            sam_proc.join(timeout=2.0)
+            if sam_proc.is_alive():
+                sam_proc.kill()
+                sam_proc.join(timeout=1.0)
+
+    atexit.register(_emergency_cleanup)
+
     robot, end_effector = init_robot_and_gripper()
 
     try:
@@ -1888,15 +1907,57 @@ if __name__ == "__main__":
             )
         rs_align.run()
     finally:
+        # 恢复默认信号处理，防止重复Ctrl+C中断清理
+        import signal
+        signal.signal(signal.SIGINT, signal.default_int_handler)
+        signal.signal(signal.SIGTERM, signal.default_int_handler)
+
+        # 1. 停止相机launch
         stop_camera_launch(camera_proc_ref[0])
         camera_proc_ref[0] = None
+
+        # 2. 安全关闭机械臂
         safe_shutdown_robot(robot, end_effector)
+
+        # 3. 销毁ROS节点
         if node is not None:
             node.destroy_node()
         if _ROS_AVAILABLE:
             rclpy.shutdown()
+
+        # 4. 发送退出信号给SAM进程
         try:
             sam_input_q.put_nowait(None)
         except queue.Full:
             pass
-        sam_proc.join(timeout=5.0)
+
+        # 5. 清空所有Queue，防止resource_tracker等待
+        for q in [sam_input_q, sam_output_q, prompt_q]:
+            try:
+                while True:
+                    q.get_nowait()
+            except queue.Empty:
+                pass
+
+        # 6. 等待SAM进程退出（延长timeout到15秒，增加重试机制）
+        print("[Cleanup] 等待SAM进程清理...")
+        sam_proc.join(timeout=15.0)
+
+        # 7. 如果仍未退出，强制终止
+        if sam_proc.is_alive():
+            print("[Cleanup] SAM进程未在15秒内退出，强制终止...")
+            sam_proc.terminate()
+            sam_proc.join(timeout=3.0)
+
+            if sam_proc.is_alive():
+                print("[Cleanup] SAM进程仍未退出，使用kill强制结束...")
+                sam_proc.kill()
+                sam_proc.join(timeout=2.0)
+
+        if not sam_proc.is_alive():
+            print("[Cleanup] SAM进程已清理完成")
+        else:
+            print("[Warning] SAM进程清理失败，可能需要手动kill")
+
+        # 取消atexit注册
+        atexit.unregister(_emergency_cleanup)

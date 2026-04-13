@@ -1,0 +1,7 @@
+{
+    "python.terminal.activateEnvironment": true,
+    "python.terminal.activateEnvInCurrentTerminal": true,
+    "python.showInterpreterVersionInStatusBar": true,
+    "terminal.integrated.inheritEnv": true,
+    "python.defaultInterpreterPath": "/home/kling/miniconda3/envs/piper_sdk_ui/bin/python"
+}

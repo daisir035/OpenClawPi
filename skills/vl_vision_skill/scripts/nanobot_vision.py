@@ -4,6 +4,15 @@ import cv2 as cv
 import base64
 import sys
 import time
+import os
+
+# 清除代理环境变量，防止 Ollama 客户端使用 socks 代理导致错误
+proxy_vars = ['http_proxy', 'https_proxy', 'HTTP_PROXY', 'HTTPS_PROXY',
+              'all_proxy', 'ALL_PROXY', 'no_proxy', 'NO_PROXY']
+for var in proxy_vars:
+    if var in os.environ:
+        del os.environ[var]
+
 from ollama import chat
 
 
@@ -18,8 +27,8 @@ def get_prompt():
 # 创建并配置pipeline
 pipeline = rs.pipeline()
 config = rs.config()
-# 启用彩色流（1920x1080分辨率，RGB8格式，8fps）
-config.enable_stream(rs.stream.color, 1920, 1080, rs.format.rgb8, 8)
+# 启用彩色流（1920x1080分辨率，RGB8格式，6fps）
+config.enable_stream(rs.stream.color, 1920, 1080, rs.format.rgb8, 6)
 
 # 启动流
 pipeline.start(config)
